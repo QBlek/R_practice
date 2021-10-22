@@ -1,0 +1,201 @@
+---
+title: "Assignment3"
+author: "Namgyu Han"
+date: '2021 9 19 '
+output:
+  word_document: default
+  html_document:
+    df_print: paged
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## 1
+
+(60 pts total) For this question you will be using either the dplyr package from R or the Pandas library in Python to manipulate and clean up a dataset called flights (from the library nycflights13 in R) that can be loaded (for R users) from the ‘data’ folder on the github repository
+
+The dataset contains information about the flights departing New York City in 2013. It has 336,776 rows and 19 variables.
+
+Load the data into R or Python, and check for abnormalities (NAs). You will likely notice several. All of the tasks in this assignment can be hand coded, but the goal is to use the functions built into dplyr or Pandas to complete the tasks. Suggested functions for Python will be shown in blue while suggested R functions are shown in red. Note: if you are using Python, be sure to load the data as a Pandas DataFrame.
+
+Below are the tasks to perform. Before you begin, print the first few values of the columns with a header containing the string “time”.
+
+```{r}
+Flights = read.csv(file="C:/Users/user/sample/flights.csv",sep=",", header=TRUE)
+
+head(Flights)
+
+head(Flights[, c("dep_time","sched_dep_time","arr_time","sched_arr_time","air_time")])
+```
+
+a)	(10 pts) Count the number of flights that departed NYC in the first week (first 7 days) of January and February combined. (filter())
+
+```{r}
+library(dplyr)
+nrow(filter(Flights, month == 1 | month == 2, day %in% c(1:7)))
+```
+
+
+b)	(10 pts) Print the year, month, day, carrier and air_time of the flights with the 6 longest air times, in descending order of air_time. (select(), arrange())
+
+```{r}
+Flights %>% select(year, month, day, carrier, air_time) %>% arrange(desc(air_time)) %>% head
+```
+
+c)	(10 pts) Add a new column to the dataframe; speed (in miles per hour) is the ratio of distance to air_time. Note that the unit of speed should be miles per hour. If you think they might be useful, feel free to extract more features than these, and describe what they are. (mutate())
+
+```{r}
+Flights %>% select(distance, air_time) %>% mutate(speed = (distance/air_time)*60) %>% head
+```
+
+I tried to find 'Increased actual flight time by delay' by [arr_delay - dep_delay]
+
+```{r}
+Flights %>% select(dep_delay, arr_delay) %>% mutate(inc_time = arr_delay - dep_delay) %>% head
+```
+
+d)	(14 pts) Display the average, min and max air_time times for each month. (group_by(), summarise()). You can exclude NAs for this calculation.
+
+```{r}
+Flights %>% group_by(month) %>% summarise_each(funs(mean(.,na.rm=TRUE) ,min(.,na.rm=TRUE), max(.,na.rm = TRUE)), air_time) 
+
+```
+
+e)	(16 pts) Impute the missing air_times as the distance divided by the average speed of flights for that destination (dest). Make a second copy of your dataframe, but this time impute missing air_time with the average air_time for that destination. What assumptions do these data filling methods make? Which is the best way to impute the data, or do you see a better way, and why? You may impute or remove other variables as you find appropriate. Briefly explain your decisions. (group_by(), mutate())
+
+```{r}
+Flights$speed <- (Flights %>% mutate(speed = (distance/air_time)*60) %>% select(speed))
+
+Flights_nomiss <- Flights %>% filter(!is.na(speed))
+
+Flights$air_time <- Flights$distance / (sum(Flights_nomiss$speed) / 327346)
+
+sum(is.na(Flights$air_time))
+```
+
+As mentioned above, the mean can be used to perform imputation, or some variability can be performed with the most frequently observed values.
+This dataset is often missing from dep_time and dep_delay. In this case, using mode is better choice than using mean. This is because some departure delays are much longer than other, and most departure delay times are similar.
+
+
+## 2
+
+(40 pts total) For this question, you will first need to read section 12.6 in the R for Data Science book, here (http://r4ds.had.co.nz/tidy-data.html#case-study). Grab the dataset from the tidyr package (tidyr::who), and tidy it as shown in the case study before answering the following questions. Note: if you are using pandas you can perform these same operations, just replace the pivot_longer() function with melt() and the pivot_wider() function with pivot(). However, you may prefer to use R for this question, as the dataset is from an R package13232222332.
+
+a)	(5 pts) Explain why this line
+ 	(> mutate(key = stringr::str_replace(key, "newrel", "new_rel"))	
+is necessary to properly tidy the data. What happens if you skip this line?)
+
+
+If you skip that line, some of row's key variables are still newrel, then you can't separate key to new, type, and sexage by "_". So, it will make missing pieces and it will fill NA 
+
+```{r}
+library(tidyr)
+who %>%   pivot_longer(cols = new_sp_m014:newrel_f65, names_to = "key", values_to = "cases", values_drop_na = TRUE) %>% 
+  separate(key, c("new", "var", "sexage"))
+```
+
+
+b)	(5 pts) How many entries are removed from the dataset when you set values_drop_na to true in the pivot_longer command (in this dataset)?
+
+```{r}
+who1 <- who %>% pivot_longer(cols = new_sp_m014:newrel_f65, names_to ="key", values_to = "cases", values_drop_na = TRUE)
+
+who1a <- who %>% pivot_longer(cols = new_sp_m014:newrel_f65, names_to ="key", values_to = "cases")
+
+nrow(who1)
+
+nrow(who1a)
+```
+
+If set values_drop_na to true, dataset includes 76046 rows. If not, dataset includes 405440 rows. So, it removed 329394 entries.
+
+
+c)	(5 pts) Explain the difference between an explicit and implicit missing value, in general. Can you find any implicit missing values in this dataset, if so where?
+
+
+Explicit missing value is that we can clearly find there is no data such as NA flag. In conversely, implicit missing value is careful observation of the dataset. For example,
+
+```{r}
+economy <- tibble(
+  year   = c(2018, 2018, 2018, 2019, 2019, 2020, 2020),
+  qtr    = c(   1,    2,    4,    1,    2,    2,    4),
+  return = c(1.28, 0.97, 1.05,   NA, 0.92, 1.17, 0.86)
+)
+head(economy, n=7)
+```
+In this dataset, we can find explicit missing value on 2019 4qtr return which expressed as NA, and implicit missing value are 2018 3qtr, 2019 3,4qtr and 2020 1,3qtr returns.
+
+So, if there is a missing country, year, and TB case in this dataset(who), that is implicit misiing value 
+
+
+d)	(5 pts) Looking at the features (country, year, var, sex, age, cases) in the tidied data, are they all appropriately typed? Are there any features you think would be better suited as a different type? Why or why not?
+ 
+```{r}
+who5 <- who %>%
+  pivot_longer(
+    cols = new_sp_m014:newrel_f65, 
+    names_to = "key", 
+    values_to = "cases", 
+    values_drop_na = TRUE
+  ) %>% 
+  mutate(
+    key = stringr::str_replace(key, "newrel", "new_rel")
+  ) %>%
+  separate(key, c("new", "var", "sexage")) %>% 
+  select(-new, -iso2, -iso3) %>% 
+  separate(sexage, c("sex", "age"), sep = 1)
+```
+It seems that everything is properly typed. In my opinion, country, year, sex, age are all important element. This is because tuberculosis is a disease that varies in incidence by gender, age, and income level(country and year). Therefore, I think it is a sufficiently good dataset because the case must be count in consideration of all element(include var which is type of TB).
+
+
+e)	(10 pts) Generate an informative visualization, which shows something about the data. Give a brief description of what it shows, and why you thought it would be interesting to investigate.
+
+```{r}
+library(ggplot2)
+ggplot(who5, aes(age, cases)) + geom_bar(stat='identity') + labs(title = "The number of cases per age", x="Age", y="Cases")
+ggplot(who5, aes(sex, cases)) + geom_bar(stat='identity') + labs(title = "The number of cases for female and male", x="Sex", y="Cases")
+```
+
+There are many statistics showing that the incidence of tuberculosis varies depending on gender and age. Men are twice as many as women, and the incidence rate is high in adolescents and young people. The graph created shows the cases by gender and age, and I thought it would be interesting if the actual statistics were the same as this dataset, and it was like that.
+
+
+f)	(10 pts) Suppose you have the following dataset called qtrRev:
+
+The table consists of 6 columns; first showing the group number, second representing the year and the last four columns provide the revenue generated in each quarter of the year. Re-structure this table, and show the code you would use to tidy this dataset (using gather()/pivot_longer() and separate()/pivot_wider() or melt() and pivot()) such that the columns are organized as: Group, Year, Time_Interval, Interval_ID and Revenue.
+Note: Here the entire Time_Interval column will contain value ‘Qtr’ since the dataset measures revenue every quarter. The Interval_ID will contain the quarter number.
+
+Below is an instance of a row of the re-structured table:
+
+
+
+The table consists of 6 columns; first showing the group number, second representing the year and the last four columns provide the revenue generated in each quarter of the year. Re-structure this table, and show the code you would use to tidy this dataset (using gather()/pivot_longer() and separate()/pivot_wider() or melt() and pivot()) such that the columns are organized as: Group, Year, Time_Interval, Interval_ID and Revenue.
+Note: Here the entire Time_Interval column will contain value ‘Qtr’ since the dataset measures revenue every quarter. The Interval_ID will contain the quarter number.
+
+Below is an instance of a row of the re-structured table:
+
+Group	Year	Time_Interval	Interval_ID	Revenue
+1	2006	Qtr	1	15
+
+
+
+```{r}
+tablef <- tibble(
+  Group   = c(1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3),
+  Year    = c(2006, 2007, 2008, 2009, 2006, 2007, 2008, 2009, 2006, 2007, 2008, 2009),
+  Qtr.1 = c(15, 12, 22, 10, 12, 16, 13, 23, 11, 13, 17, 14),
+  Qtr.2 = c(16, 13, 22, 14, 13, 14, 11, 20, 12, 11, 12, 19),
+  Qtr.3 = c(19, 27, 24, 20, 25, 21, 29, 26, 22, 27, 23, 31),
+  Qtr.4 = c(17, 23, 20, 16, 18, 19, 15, 20, 16, 21, 19, 24),
+)
+
+head(tablef, n=12)
+```
+```{r}
+tablef1 <- tablef %>% pivot_longer(c(`Qtr.1`, `Qtr.2`, `Qtr.3`, `Qtr.4`), names_to = "Interval", values_to = "Revenue")  %>% 
+  mutate(Interval = stringr::str_replace(Interval, "Qtr.", "Qtr_")) %>% 
+  separate(Interval, c("Time_Interval", "Interval_ID"), sep = "_")
+
+head(tablef1, n=48)
+```

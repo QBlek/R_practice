@@ -1,0 +1,225 @@
+---
+title: "assignment4"
+author: "Namgyu Han"
+date: '2021 10 2 '
+output:
+  word_document: default
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Problem 1
+
+This problem will involve the nycflights13 dataset (including tables flights, airlines, airports, planes and weather), which we saw in class. It is available in both R and Python, however R is recommended for at least the visualization portion of the question. You can get more information about this package on github at
+
+https://github.com/tidyverse/nycflights13
+
+The data tables can be found in the data-raw folder of the above-mentioned github repository. Additionally, the flights.csv file which was used in assignment 3 is available in the Datasets module on Canvas. Start by installing and importing the dataset to your chosen platform. We will first use joins to search and manipulate the dataset, then we will produce a flight count visualization.
+
+
+```{r}
+library(nycflights13)
+library(tidyverse)
+library(dplyr)
+library(lubridate)
+
+Flights = read.csv(file="C:/Users/user/sample/flights.csv",sep=",", header=TRUE)
+Airlines = read.csv(file="C:/Users/user/sample/airlines.csv",sep=",", header=TRUE)
+Airports = read.csv(file="C:/Users/user/sample/airports.csv",sep=",", header=TRUE)
+Planes = read.csv(file="C:/Users/user/sample/planes.csv",sep=",", header=TRUE)
+Weather = read.csv(file="C:/Users/user/sample/weather.csv",sep=",", header=TRUE)
+```
+
+a.	(10 pts) Filter the dataset (using a left join) to display the tail number, year, month, day, hour, origin, and humidity for all flights heading to Tampa International Airport (TPA) after 12pm on November 1, 2013.
+
+```{r}
+FlightsTPA <- subset(Flights, dest=='TPA')
+
+Flights2 <- FlightsTPA %>% select(dest, tailnum, year:day, hour, origin)
+Weather2 <- Weather %>% select(origin, year:hour, humid)
+
+Flights3 <- Flights2 %>% unite(value, origin, year, month, day, hour, sep="_")
+
+Weather3 <- Weather2 %>% unite(value, origin, year, month, day, hour, sep="_")
+
+Prob1 <- left_join(Flights3, Weather3, by = "value")
+
+Prob1_a <- Prob1 %>% separate(value, into = c("origin", "year", "month", "day", "hour"))                    
+
+Prob1_a <- Prob1_a %>% mutate_at(vars(hour), as.numeric)
+
+Prob1_b <- Prob1_a %>% filter(year == 2013 & month == 11 & day == 1 & (hour > 11 & hour <= 24))
+
+head(Prob1_b, n=20)
+```
+
+
+
+b.	(10 pts) What is the difference between the following two joins?
+
+The first is to drop the observation with "dest = faa" from the flights table, and the second is to drop the observation with "faa = dest" from the airports table. In other words, we will get flights based table from first join and airport based table from second join.
+
+```{r}
+prob2_a <- anti_join(Flights, Airports, by = c("dest" = "faa"))
+prob2_b <- anti_join(Airports, Flights, by = c("faa" = "dest"))
+
+summary(Flights$dest)
+summary(prob2_a$dest)
+summary(Airports$faa)
+summary(prob2_b$faa)
+
+print("The first join head")
+head(prob2_a)
+
+print("The second join head")
+head(prob2_b)
+```
+
+c.	(10 pts) Filter the table flights to only show flights with planes that have flown at least 100 flights. Hint: tailnum is used to identify planes. (suggested functions: R: semi_join(), count(), filter(); Python: merge(), value_counts(), filter())
+
+```{r}
+Prob3 <- Flights %>% count(tailnum) %>% filter(n >= 100)
+print("Total number of the flights with planes flown at least 100 flights: ")
+sum(Prob3$n)
+Prob3_a <- semi_join(Flights, Prob3, by = "tailnum")
+print("The number of the flights after semi-join: ")
+summary(Prob3_a$tailnum)
+print("So, we find the right result.")
+head(Prob3_a)
+```
+
+d.	(10 pts) What weather conditions make it more likely to see a delay? Briefly discuss any relations/patterns you found.
+
+I compared the weather when the departure delay time was limited to the case of more than 20 minutes and the weather in the average case.
+
+```{r}
+Prob4_F <- Flights %>% filter(dep_delay > 20 | dep_delay < -20) %>% select(tailnum, origin, year:day, hour, dep_delay) %>% unite(value, origin, year, month, day, hour, sep="_")
+Prob4_W <- Weather %>% select(origin, year:hour, temp, dewp, humid, wind_speed, pressure, visib) %>% filter(!is.na(temp)) %>% filter(!is.na(dewp)) %>% filter(!is.na(humid)) %>% filter(!is.na(wind_speed)) %>% filter(!is.na(pressure)) %>% unite(value, origin, year, month, day, hour, sep="_") 
+```
+
+Weather in the average:
+
+```{r}
+sapply(Prob4_W[2:7], mean)
+```
+
+Weather in the case which flight are delaying more than 20 minute
+
+```{r}
+Prob4_J <- left_join(Prob4_F, Prob4_W, by = "value") %>% filter(!is.na(temp)) %>% filter(!is.na(dewp)) %>% filter(!is.na(humid)) %>% filter(!is.na(wind_speed)) %>% filter(!is.na(pressure))
+sapply(Prob4_J[4:9], mean)
+```
+
+We can see that there is a noticeable change in temperature. My prediction is that departures are often delayed when the temperature is high, and I think it is the most sensitive weather factor.
+
+
+e.	(10 pts) Produce a map that sizes each destination airport by the number of incoming flights. You may use a continuous scale for the size. Here is a code snippet to draw a map of all flight destinations, which you can use as a starting point. You may need to install the maps packages if you have not already. Adjust the title, axis labels and aesthetics to make this visualization as clear as possible.
+
+```{r}
+library(ggplot2)
+library(maps)
+Prob5 <- Flights %>% left_join(Airports, c("dest" = "faa"))
+Prob5_a <- Prob5 %>% count(name)
+
+Prob5_b <- left_join(Prob5, Prob5_a, by = "name") 
+Prob5_c <- na.omit(Prob5_b)
+Prob5_d <- Prob5_c[-which(duplicated(Prob5_c$name)),]
+
+ggplot(Prob5_d, aes(x=lon, y=lat, size=n, color=n)) + borders("state") + geom_point() + coord_quickmap() +
+  scale_size(range = c(1, 5)) +
+  labs(title = "The number of incoming flights for each airport", x="Longtitude", y="Latitude", size="Incoming flights", color ="Incoming flights") + theme(plot.title = element_text(hjust = 0.5))
+
+```
+
+
+
+## Problem 2
+
+The goal of this problem to create a visualization of the US map showing the states/territories and the number of vaccine doses administered in each state/territory. For this task, you will work with the data table for COVID-19 vaccinations in the US provided by CDC (Centers for Disease Control and prevention). The dataset can be found at
+
+https://covid.cdc.gov/covid-data-tracker/#vaccinations_vacc-total-admin-rate-total
+
+However, we are interested only in 4 columns in this dataset: State/Territory/Federal Entity, Total number of Janssen doses administered, Total number of Moderna doses administered, Total number of Pfizer doses administered
+
+A subset of the data (covid19_vaccinations_USA.csv) containing only these 4 columns has already been made available on Canvas, in the Datasets module. The dataset contains 63 observations of 4 variables:
+
+state	- State/ Territory/Federal Entity 
+Janssen_doses	- Total number of Janssen doses administered
+Moderna_doses	- Total number of Moderna doses administered 
+Pfizer_doses	- Total number of Pfizer doses administered
+
+Create visualizations of the US map coloring the states or sizing the point/marker for the states according to the number of doses for each vaccine (one map per vaccine). Compare the administration of vaccines in different states using the maps you generated (we recommend that you maintain a constant scale for showing the number of doses in all the three maps; hint: check min and max values in the dataset for the scale).
+
+You are free to choose any mapping tool you wish to produce this visualization. Try to make your visualization as nice looking as possible. You can use the state column directly to visualize the observations or you could get the coordinates for each state (depending on the tool and your visualization). Research how this can be done and use what you find. The dataplusscience.com website has some blogs about mapping that you may find useful. After you have coordinates you can use different methods for mapping. You can use packages available in R or Python. Another simple method is probably through https://batchgeo.com/features/map-coordinates/ . However, you can also use d3 to map the locations, if you want to learn something that you could use for other projects later.
+
+```{r}
+Covid = read.csv(file="C:/Users/user/sample/covid.csv",sep=",", header=TRUE)
+names(Covid)[1] <- c("state")
+names(Covid)[19] <- c("Janssen")
+names(Covid)[22] <- c("Moderna")
+names(Covid)[23] <- c("Pfizer")
+Covid2 <-  Covid %>% select(state, Janssen, Moderna, Pfizer)
+head(Covid2)
+
+library(tibble)
+library(ggplot2)
+library(ggiraphExtra)
+library(ggthemes)
+
+Covid2$state <- tolower(Covid2$state)
+
+states_map <- map_data("state")
+
+ggChoropleth(data=Covid2, aes(fill=Janssen, map_id=state), map=states_map)
+ggChoropleth(data=Covid2, aes(fill=Moderna, map_id=state), map=states_map)
+ggChoropleth(data=Covid2, aes(fill=Pfizer, map_id=state), map=states_map)
+```
+
+
+
+
+## Problem 3
+
+Create a word cloud for an interesting (relatively short, say a couple of pages) document of your own choice. Examples of suitable documents include: summary of a recent project you are working or have worked on; your own recent Statement of Purpose or Research Statement or some other similar document.
+ 
+You can create the word clouds in R using the package called wordcloud or you can use another tool outside of R such as Wordle. If you do this in R, you will first need to install wordcloud (using install.packages("wordcloud")) and then load it (using library(wordcloud)). Then look up the documentation for the function called wordcloud in the package with the same name to create your cloud. Note that this function takes many arguments, but you would be mostly fine with the default settings. Only providing the text of your words may suffice for a minimalist purpose.
+You are welcome (and encouraged) to take the generated word cloud and manipulate it using another software to enhance its aesthetic. If you have used Wordle instead of R, Wordle gives you functionalities to play with the look of the word cloud you get. Experiment till you get something you like most.
+
+Your submission for this would include the figure (cloud) and a brief caption that describes the text for the cloud. For example, it could be something like ``Jenneth Joe's Essay on Life During Pandemic, written in June 2021."
+
+This document is draft of "Stock Chart Prediction Algorithm and Similarity Comparison Algorithm for Two Stock Charts" written by myself
+
+```{r}
+library(wordcloud)
+library(RColorBrewer)
+library(pdftools)
+library(stringr)
+
+sample <- pdf_text("C:/Users/user/sample/wordcloudpdf.pdf")
+# print(sample)
+sample2 <- str_replace_all(sample, "\\W", " ") %>% str_replace_all("[^[:ascii:]]+", " ") %>% str_replace_all("[[:space:]]{1,}", " ") %>% str_replace_all("\\[[[:digit:]]+\\]|\\([[:digit:]]+\\)", "") %>% str_replace_all("[[:punct:]]+", " ") %>% str_replace_all("[[:digit:]]+", "") %>% str_replace_all("[[:space:]]{1,}", " ")
+# print(sample2)
+sample3 <- sample2 %>% str_split(" ") %>% unlist()
+# print(sample3)
+
+sample3_freq <- sample3 %>%  table() %>% sort(decreasing = TRUE)
+
+# print(sample3_freq)
+
+palete <- brewer.pal(8, "Dark2")
+wordcloud(word = names(sample3_freq), freq = sample3_freq, min.freq = 3, max.words = 100, random.order = FALSE, random.color = TRUE, rot.per = 0.1, scale = c(8,0.5), colors = palete)
+```
+
+
+
+
+
+
+
+
+
+
